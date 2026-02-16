@@ -1,0 +1,98 @@
+# SP-Pipeline Default Configuration
+# -----------------------------------
+
+# NCBI Entrez settings
+ncbi:
+  email: ""           # REQUIRED: set your email for NCBI API access
+  api_key: ""         # Optional: NCBI API key for higher rate limits (10 req/s vs 3 req/s)
+  rate_limit: 3       # requests per second (auto-set to 10 if api_key is provided)
+
+# Cache settings
+cache:
+  enabled: true
+  directory: ""       # Leave empty to use default platform cache dir
+  ttl_days: 30        # Cache expiration in days
+
+# Query defaults
+query:
+  default_evidence: "all"          # "experimental", "predicted", "curated_annotation", "all"
+  default_mode: "representative"   # "exhaustive" or "representative"
+  include_predictions: false       # Run SignalP/Phobius de novo
+  max_results_per_query: 5000      # Safety limit
+
+# Predictor settings (optional)
+predictors:
+  signalp:
+    enabled: false
+    # Path to local SignalP 6.0 installation, or "web" to use the web API
+    mode: "web"
+    path: ""
+  phobius:
+    enabled: false
+    mode: "web"
+    path: ""
+
+# Output settings
+output:
+  format: "csv"                    # "csv" or "tsv"
+  include_fasta: false             # Also export SP sequences as FASTA
+  delimiter: ","
+
+# Logging
+logging:
+  level: "INFO"                    # DEBUG, INFO, WARNING, ERROR
+  file: ""                         # Leave empty for stdout only
+
+# Presets definition
+presets:
+  human_type1:
+    description: "Human type 1 (cleaved) signal peptides"
+    sources: ["uniprot"]
+    organism: "Homo sapiens"
+    taxonomy_id: 9606
+    sp_type: "type1_cleaved"
+    evidence: "all"
+
+  human_type2:
+    description: "Human type 2 signal anchors (uncleaved)"
+    sources: ["uniprot"]
+    organism: "Homo sapiens"
+    taxonomy_id: 9606
+    sp_type: "type2_signal_anchor"
+    evidence: "all"
+
+  influenza_HA:
+    description: "Signal peptides of influenza hemagglutinin (all subtypes, A/B/C/D)"
+    sources: ["uniprot", "ncbi"]
+    organism_group: "influenza"
+    protein: "hemagglutinin"
+    sp_type: "type1_cleaved"
+    subtypes: "all"              # or list: ["H1", "H3", "H5"]
+    mode: "representative"
+
+  influenza_NA:
+    description: "Signal peptides of influenza neuraminidase (all subtypes)"
+    sources: ["uniprot", "ncbi"]
+    organism_group: "influenza"
+    protein: "neuraminidase"
+    sp_type: "type1_cleaved"
+    subtypes: "all"
+    mode: "representative"
+
+  alphavirus_E3:
+    description: "Alphavirus E3/pE2 signal peptides"
+    sources: ["uniprot", "ncbi"]
+    organism_group: "alphavirus"
+    protein: "E3_pE2"
+    sp_type: "type1_cleaved"
+    include_full_e3: true         # Option to include E3 as complete peptide
+    mode: "representative"
+
+  flavivirus:
+    description: "Flavivirus signal peptides (prM + internal signals)"
+    sources: ["uniprot", "ncbi"]
+    organism_group: "flavivirus"
+    protein: "all"                # prM, C-prM junction, E-NS1 junction
+    sp_type: "all"                # type1_cleaved + internal_signal
+    include_internal_signals: true
+    mode: "representative"
