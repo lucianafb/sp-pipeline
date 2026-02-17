@@ -16,7 +16,7 @@ env/
 .idea/
 
 # Pipeline outputs
-output/*.csv
+# output/*.csv  # Commented to make CSVs visible in VSCode
 output/*.fasta
 output/*.tsv
 cache/

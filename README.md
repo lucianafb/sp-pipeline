@@ -154,6 +154,43 @@ Or pass a config file directly:
 sp-pipeline query --preset human_type1 --config my_config.yaml
 ```
 
+## Troubleshooting
+
+### No results found for viral presets
+
+Presets like `influenza_NA`, `alphavirus_E3`, and `flavivirus` require NCBI to be configured.
+
+```bash
+export SP_PIPELINE_NCBI_EMAIL="your@email.com"
+sp-pipeline query --preset influenza_HA -o output/influenza_ha.csv
+```
+
+### Info message about NCBI at startup
+
+```
+NCBI source not configured (only needed for viral presets)...
+```
+
+This is purely informational. UniProt works without NCBI. This message is only relevant if you plan to run viral presets.
+
+### Empty query group in summary (`: 2268` instead of `human_type2: 2268`)
+
+This was a bug in versions < 0.2.0 caused by a cache ordering issue. Clear the cache and re-run:
+
+```bash
+sp-pipeline clear-cache
+sp-pipeline query --preset human_type1 --preset human_type2 -o output/results.csv
+```
+
+### Check what presets are available with your current configuration
+
+```bash
+sp-pipeline presets   # Shows all presets with their status (Ready / Missing source)
+sp-pipeline check     # Shows which data sources are configured and reachable
+```
+
+---
+
 ## CLI Commands
 
 | Command | Description |

@@ -24,7 +24,6 @@ query:
 predictors:
   signalp:
     enabled: false
-    # Path to local SignalP 6.0 installation, or "web" to use the web API
     mode: "web"
     path: ""
   phobius:
@@ -34,14 +33,14 @@ predictors:
 
 # Output settings
 output:
-  format: "csv"                    # "csv" or "tsv"
-  include_fasta: false             # Also export SP sequences as FASTA
+  format: "csv"
+  include_fasta: false
   delimiter: ","
 
 # Logging
 logging:
-  level: "INFO"                    # DEBUG, INFO, WARNING, ERROR
-  file: ""                         # Leave empty for stdout only
+  level: "INFO"
+  file: ""
 
 # Presets definition
 presets:
@@ -54,7 +53,7 @@ presets:
     evidence: "all"
 
   human_type2:
-    description: "Human type 2 signal anchors (uncleaved)"
+    description: "Human type 2 signal anchors (uncleaved, single-pass type II)"
     sources: ["uniprot"]
     organism: "Homo sapiens"
     taxonomy_id: 9606
@@ -67,32 +66,32 @@ presets:
     organism_group: "influenza"
     protein: "hemagglutinin"
     sp_type: "type1_cleaved"
-    subtypes: "all"              # or list: ["H1", "H3", "H5"]
+    subtypes: "all"
     mode: "representative"
 
   influenza_NA:
-    description: "Signal peptides of influenza neuraminidase (all subtypes)"
+    description: "Signal anchors of influenza neuraminidase (type II membrane protein)"
     sources: ["uniprot", "ncbi"]
     organism_group: "influenza"
     protein: "neuraminidase"
-    sp_type: "type1_cleaved"
+    sp_type: "type2_signal_anchor"
     subtypes: "all"
     mode: "representative"
 
   alphavirus_E3:
-    description: "Alphavirus E3/pE2 signal peptides"
+    description: "Alphavirus E3/pE2 signal peptides from structural polyprotein"
     sources: ["uniprot", "ncbi"]
     organism_group: "alphavirus"
     protein: "E3_pE2"
     sp_type: "type1_cleaved"
-    include_full_e3: true         # Option to include E3 as complete peptide
+    include_full_e3: true
     mode: "representative"
 
   flavivirus:
-    description: "Flavivirus signal peptides (prM + internal signals)"
+    description: "Flavivirus signal peptides (prM + internal signals from genome polyprotein)"
     sources: ["uniprot", "ncbi"]
     organism_group: "flavivirus"
-    protein: "all"                # prM, C-prM junction, E-NS1 junction
-    sp_type: "all"                # type1_cleaved + internal_signal
+    protein: "all"
+    sp_type: "all"
     include_internal_signals: true
     mode: "representative"

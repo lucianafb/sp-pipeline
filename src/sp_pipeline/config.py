@@ -122,14 +122,18 @@ def get_preset(config: dict, preset_name: str) -> dict:
     return presets[preset_name]
 
 
-def list_presets(config: dict) -> list[dict[str, str]]:
-    """List all available presets with their descriptions.
+def list_presets(config: dict) -> list[dict]:
+    """List all available presets with their descriptions and required sources.
 
     Returns:
-        List of dicts with 'name' and 'description' keys.
+        List of dicts with 'name', 'description', and 'sources' keys.
     """
     presets = config.get("presets", {})
     return [
-        {"name": name, "description": preset.get("description", "")}
+        {
+            "name": name,
+            "description": preset.get("description", ""),
+            "sources": preset.get("sources", ["uniprot"]),
+        }
         for name, preset in presets.items()
     ]

@@ -91,7 +91,10 @@ class NCBISource(BaseSource):
             cached = self._cache.get(cache_key)
             if cached is not None:
                 logger.info(f"Cache hit: {len(cached)} records")
-                return [SPRecord(**r) for r in cached]
+                records = [SPRecord(**r) for r in cached]
+                for r in records:
+                    r.query_group = query_group
+                return records
 
         # Search for IDs
         ids = self._search(search_query, params)

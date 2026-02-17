@@ -165,18 +165,31 @@ def presets(
         help="Path to custom config file",
     ),
 ):
-    """List all available query presets."""
+    """List all available query presets and their status."""
     pipeline = SPPipeline(config_path=config)
     available = pipeline.list_available_presets()
+    source_status = pipeline.check_sources()
 
     table = Table(title="Available Presets")
     table.add_column("Name", style="cyan", no_wrap=True)
     table.add_column("Description", style="white")
+    table.add_column("Sources", style="yellow")
+    table.add_column("Status", no_wrap=True)
 
     for p in available:
-        table.add_row(p["name"], p["description"])
+        sources = p.get("sources", ["uniprot"])
+        sources_str = ", ".join(sources)
+        all_ok = all(source_status.get(s, False) for s in sources)
+        status = "[green]✓ Ready[/green]" if all_ok else "[red]✗ Missing source[/red]"
+        table.add_row(p["name"], p["description"], sources_str, status)
 
     console.print(table)
+
+    if not source_status.get("ncbi", False):
+        console.print(
+            "\n[dim]Tip: To enable NCBI-dependent presets, set:[/dim] "
+            "[cyan]export SP_PIPELINE_NCBI_EMAIL=\"your@email.com\"[/cyan]"
+        )
 
 
 @app.command()
@@ -197,6 +210,13 @@ def check(
     for source, available in status.items():
         icon = "[green]✓[/green]" if available else "[red]✗[/red]"
         console.print(f"  {icon} {source}")
+
+    if "ncbi" not in status:
+        console.print(
+            "\n  [yellow]ℹ[/yellow]  ncbi: not configured "
+            "(optional — required only for viral presets)\n"
+            "     To enable: [cyan]export SP_PIPELINE_NCBI_EMAIL=\"your@email.com\"[/cyan]"
+        )
 
     console.print()
 
