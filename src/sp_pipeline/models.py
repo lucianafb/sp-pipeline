@@ -46,6 +46,13 @@ class SPRecord:
     viral_subtype: Optional[str] = None    # e.g., H1, N2, DENV-2, CHIKV
     viral_host: Optional[str] = None       # e.g., human, avian, swine
 
+    # Biophysical features (computed from sp_sequence)
+    hydrophobicity_mean: Optional[float] = None   # Kyte-Doolittle mean
+    net_charge_ph7: Optional[float] = None         # Net charge at pH 7
+    n_region: Optional[str] = None                 # n-terminal charged region
+    h_region: Optional[str] = None                 # hydrophobic core
+    c_region: Optional[str] = None                 # c-terminal region with cleavage site
+
     # Metadata
     query_group: str = ""                  # Preset name that retrieved this record
     date_retrieved: str = field(default_factory=lambda: date.today().isoformat())
@@ -91,6 +98,11 @@ CSV_COLUMNS = [
     "evidence_method",
     "viral_subtype",
     "viral_host",
+    "hydrophobicity_mean",
+    "net_charge_ph7",
+    "n_region",
+    "h_region",
+    "c_region",
     "query_group",
     "date_retrieved",
 ]

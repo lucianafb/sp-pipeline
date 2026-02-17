@@ -15,7 +15,7 @@ import requests
 
 from sp_pipeline.models import SPRecord
 from sp_pipeline.sources import BaseSource
-from sp_pipeline.utils import RateLimiter, QueryCache, make_cache_key, extract_cleavage_motif
+from sp_pipeline.utils import RateLimiter, QueryCache, make_cache_key, extract_cleavage_motif, compute_sp_features
 
 logger = logging.getLogger("sp_pipeline.sources.uniprot")
 
@@ -92,7 +92,7 @@ class UniProtSource(BaseSource):
         )
         # For viral polyprotein queries, also request chain/propeptide/site features
         organism_group = params.get("organism_group", "")
-        if organism_group in ("flavivirus", "alphavirus"):
+        if organism_group in ("flavivirus", "alphavirus", "bunyavirus"):
             base_fields += ",ft_chain,ft_peptide,ft_topo_dom,ft_site"
         return base_fields
 
@@ -165,6 +165,25 @@ class UniProtSource(BaseSource):
             parts.append('(protein_name:"Structural polyprotein")')
             parts.append("(reviewed:true)")
 
+        # --- BUNYAVIRUS QUERIES ---
+        elif organism_group == "bunyavirus":
+            # Bunyavirus GPC: NH₂-[SP]-[Gn]-[Gc]-COOH
+            # The N-terminal SP is a classic cleaved Type 1 signal peptide.
+            # Genus-level taxonomy IDs for the two main groups:
+            #   Orthohantavirus: 1980415
+            #   Orthobunyavirus: 11572
+            # Specific viruses can be passed via taxonomy_id param.
+            if params.get("taxonomy_id"):
+                parts.append(f"(taxonomy_id:{params['taxonomy_id']})")
+            else:
+                parts.append("(taxonomy_id:1980415 OR taxonomy_id:11572)")
+            # GPC / M-segment glycoprotein precursor entries
+            parts.append(
+                "(protein_name:glycoprotein OR protein_name:\"envelope protein\" "
+                "OR protein_name:\"M segment\" OR protein_name:\"polyprotein M\")"
+            )
+            parts.append("(reviewed:true)")
+
         # --- FLAVIVIRUS QUERIES ---
         elif organism_group == "flavivirus":
             # Flavivirus signal peptides are internal signals within the Genome polyprotein.
@@ -188,7 +207,9 @@ class UniProtSource(BaseSource):
         return query
 
     def _fetch_all(self, query: str, fields: Optional[str] = None) -> list[dict]:
-        """Fetch all results from UniProt API with pagination."""
+        """Fetch all results from UniProt API with pagination, retry and progress bar."""
+        from tqdm import tqdm
+
         results = []
 
         if not fields:
@@ -204,24 +225,66 @@ class UniProtSource(BaseSource):
             f"format=json&size={BATCH_SIZE}"
         )
 
+        MAX_RETRIES = 3
+        BACKOFF = 2  # seconds base for exponential backoff
+
+        total = None
+        pbar = None
+
         while url:
             self._rate_limiter.wait()
-            try:
-                response = requests.get(url, timeout=30)
-                response.raise_for_status()
-                data = response.json()
-                results.extend(data.get("results", []))
-                logger.debug(f"Fetched batch: {len(data.get('results', []))} entries")
 
-                # Pagination: check for 'Link' header
-                url = None
-                link_header = response.headers.get("Link", "")
-                if 'rel="next"' in link_header:
-                    url = link_header.split(";")[0].strip("<>")
+            # Retry with exponential backoff
+            for attempt in range(MAX_RETRIES):
+                try:
+                    response = requests.get(url, timeout=(10, 60))
 
-            except requests.RequestException as e:
-                logger.error(f"UniProt API error: {e}")
+                    if response.status_code == 200:
+                        break
+                    if response.status_code == 429:
+                        wait = int(response.headers.get("Retry-After", BACKOFF ** (attempt + 1)))
+                        logger.warning(f"Rate limited (429). Waiting {wait}s...")
+                        time.sleep(wait)
+                        continue
+                    if response.status_code >= 500:
+                        wait = BACKOFF ** (attempt + 1)
+                        logger.warning(f"Server error ({response.status_code}). Retry in {wait}s...")
+                        time.sleep(wait)
+                        continue
+                    response.raise_for_status()
+
+                except requests.exceptions.Timeout:
+                    time.sleep(BACKOFF ** (attempt + 1))
+                except requests.exceptions.ConnectionError as e:
+                    logger.warning(f"Connection error: {e}. Retry...")
+                    time.sleep(BACKOFF ** (attempt + 1))
+            else:
+                logger.error(f"UniProt API failed after {MAX_RETRIES} attempts")
                 break
+
+            data = response.json()
+            batch = data.get("results", [])
+            results.extend(batch)
+
+            # Init progress bar on first response
+            if total is None:
+                total = int(response.headers.get("x-total-results", 0))
+                if total > 0:
+                    pbar = tqdm(total=total, desc="Downloading", unit=" entries")
+
+            if pbar:
+                pbar.update(len(batch))
+
+            logger.debug(f"Fetched batch: {len(batch)} entries")
+
+            # Pagination
+            url = None
+            link_header = response.headers.get("Link", "")
+            if 'rel="next"' in link_header:
+                url = link_header.split(";")[0].strip("<>")
+
+        if pbar:
+            pbar.close()
 
         return results
 
@@ -270,6 +333,7 @@ class UniProtSource(BaseSource):
                     motif = extract_cleavage_motif(full_sequence, end)
                     evidences = feat.get("evidences", [])
                     evidence_method = self._determine_evidence(evidences)
+                    bio = compute_sp_features(sp_seq)
 
                     record = SPRecord(
                         entry_id=entry_id,
@@ -286,14 +350,15 @@ class UniProtSource(BaseSource):
                         cleavage_site_motif=motif,
                         evidence_method=evidence_method,
                         viral_subtype=self._extract_viral_subtype(entry, params),
+                        **bio,
                     )
                     records.append(record)
 
             # --- Transmembrane (type 2, signal anchor or NA-like) ---
             elif feat_type == "Transmembrane":
-                # Flavivirus/alphavirus polyproteins are handled by specialized parsers —
+                # Viral polyproteins are handled by specialized parsers —
                 # skip generic TM processing to avoid creating duplicate records.
-                if organism_group in ("flavivirus", "alphavirus"):
+                if organism_group in ("flavivirus", "alphavirus", "bunyavirus"):
                     continue
 
                 # For human type 2 query OR influenza NA
@@ -311,6 +376,7 @@ class UniProtSource(BaseSource):
                         evidence_method = self._determine_evidence(
                             feat.get("evidences", [])
                         )
+                        bio = compute_sp_features(sp_seq)
 
                         record = SPRecord(
                             entry_id=entry_id,
@@ -327,6 +393,7 @@ class UniProtSource(BaseSource):
                             cleavage_site_motif=None,
                             evidence_method=evidence_method,
                             viral_subtype=self._extract_viral_subtype(entry, params),
+                            **bio,
                         )
                         records.append(record)
 
@@ -346,6 +413,11 @@ class UniProtSource(BaseSource):
                 entry, full_sequence, params
             )
             records.extend(polyprotein_records)
+
+        # --- Special handling for bunyavirus GPC ---
+        if organism_group == "bunyavirus":
+            gpc_records = self._parse_bunyavirus_gpc(entry, full_sequence, params)
+            records.extend(gpc_records)
 
         return records
 
@@ -419,6 +491,7 @@ class UniProtSource(BaseSource):
                     continue
                 sp_seq = full_sequence[sp_start - 1 : sp_end]
                 motif = extract_cleavage_motif(full_sequence, sp_end)
+                bio = compute_sp_features(sp_seq)
                 records.append(SPRecord(
                     entry_id=entry_id,
                     source_db="UniProt",
@@ -434,6 +507,7 @@ class UniProtSource(BaseSource):
                     cleavage_site_motif=motif,
                     evidence_method=self._determine_evidence(site["evidences"]),
                     viral_subtype=viral_subtype,
+                    **bio,
                 ))
             else:
                 # Subsequent sites: find the TM region that ends just before this cut
@@ -446,6 +520,7 @@ class UniProtSource(BaseSource):
 
                 if matching_tm:
                     sp_seq = full_sequence[matching_tm["start"] - 1 : matching_tm["end"]]
+                    bio = compute_sp_features(sp_seq)
                     records.append(SPRecord(
                         entry_id=entry_id,
                         source_db="UniProt",
@@ -463,6 +538,7 @@ class UniProtSource(BaseSource):
                             matching_tm["evidences"]
                         ),
                         viral_subtype=viral_subtype,
+                        **bio,
                     ))
 
         return records
@@ -512,6 +588,7 @@ class UniProtSource(BaseSource):
             if start and end and full_sequence:
                 sp_seq = full_sequence[start - 1 : end]
                 motif = extract_cleavage_motif(full_sequence, end)
+                bio = compute_sp_features(sp_seq)
                 record = SPRecord(
                     entry_id=entry_id,
                     source_db="UniProt",
@@ -529,8 +606,117 @@ class UniProtSource(BaseSource):
                         feat.get("evidences", [])
                     ),
                     viral_subtype=viral_subtype,
+                    **bio,
                 )
                 records.append(record)
+
+        return records
+
+    def _parse_bunyavirus_gpc(
+        self, entry: dict, full_sequence: str, params: dict
+    ) -> list[SPRecord]:
+        """Parse signal peptides from bunyavirus GPC (Glycoprotein Precursor).
+
+        Architecture: NH₂-[SP]-[Gn]-[Gc]-COOH
+        The N-terminal SP is a classic Type 1 cleaved signal peptide.
+
+        Extraction strategies (in order):
+        1. Explicit Signal feature annotation
+        2. Infer SP from Chain boundaries: if Chain "Glycoprotein N" starts at pos > 1,
+           SP = residues 1..(Gn_start - 1)
+        3. Fallback: first Transmembrane region near N-terminus as putative SP
+        """
+        records = []
+        entry_id = entry.get("primaryAccession", "")
+        organism = entry.get("organism", {}).get("scientificName", "")
+        tax_id = entry.get("organism", {}).get("taxonId")
+        protein_name = (
+            entry.get("proteinDescription", {})
+            .get("recommendedName", {})
+            .get("fullName", {})
+            .get("value", "Glycoprotein precursor")
+        )
+        viral_subtype = self._extract_viral_subtype(entry, params)
+        features = entry.get("features", [])
+
+        def _build_record(sp_seq, start, end, sp_type, ev_list):
+            motif = extract_cleavage_motif(full_sequence, end)
+            bio = compute_sp_features(sp_seq)
+            return SPRecord(
+                entry_id=entry_id,
+                source_db="UniProt",
+                organism=organism,
+                taxonomy_id=tax_id,
+                protein_name=protein_name,
+                gene_name="",
+                full_sequence=full_sequence,
+                sp_sequence=sp_seq,
+                sp_start=start,
+                sp_end=end,
+                sp_type=sp_type,
+                cleavage_site_motif=motif,
+                evidence_method=self._determine_evidence(ev_list),
+                viral_subtype=viral_subtype,
+                **bio,
+            )
+
+        # Collect features by type
+        signals = []
+        chains = []
+        tms = []
+        for feat in features:
+            ft_type = feat.get("type", "")
+            loc = feat.get("location", {})
+            s = loc.get("start", {}).get("value")
+            e = loc.get("end", {}).get("value")
+            if not (isinstance(s, int) and isinstance(e, int)):
+                continue
+            item = {"start": s, "end": e, "desc": feat.get("description", ""), "evidences": feat.get("evidences", [])}
+            if ft_type == "Signal":
+                signals.append(item)
+            elif ft_type == "Chain":
+                chains.append(item)
+            elif ft_type == "Transmembrane":
+                tms.append(item)
+
+        chains.sort(key=lambda x: x["start"])
+        tms.sort(key=lambda x: x["start"])
+
+        # Strategy 1: Explicit Signal feature
+        for sig in signals:
+            sp_seq = full_sequence[sig["start"] - 1 : sig["end"]]
+            if sp_seq and len(sp_seq) >= 5:
+                records.append(_build_record(sp_seq, sig["start"], sig["end"], "type1_cleaved", sig["evidences"]))
+
+        if records:
+            return records
+
+        # Strategy 2: Infer SP from Gn chain start
+        gn_chain = None
+        for ch in chains:
+            desc = ch["desc"].lower()
+            if any(p in desc for p in ("glycoprotein n", "glycoprotein gn", "protein gn")):
+                gn_chain = ch
+                break
+
+        if gn_chain and gn_chain["start"] > 1:
+            sp_end = gn_chain["start"] - 1
+            sp_seq = full_sequence[0:sp_end]
+            if sp_seq and 5 <= len(sp_seq) <= 50:
+                records.append(_build_record(sp_seq, 1, sp_end, "type1_cleaved", gn_chain["evidences"]))
+
+        if records:
+            return records
+
+        # Strategy 3: Fallback — first TM near N-terminus
+        for tm in tms:
+            if tm["start"] < 80:
+                sp_end = tm["start"] - 1
+                if sp_end >= 5:
+                    sp_seq = full_sequence[0:sp_end]
+                    if sp_seq and 5 <= len(sp_seq) <= 50:
+                        records.append(_build_record(sp_seq, 1, sp_end, "type1_cleaved", tm["evidences"]))
+                break  # Only use the first TM
 
         return records
 
@@ -607,6 +793,33 @@ class UniProtSource(BaseSource):
                 "barmah": "BFV",
             }
             for key, val in mapping.items():
+                if key in name:
+                    return val
+
+        elif organism_group == "bunyavirus":
+            name = organism.lower()
+            # Orthohantaviruses
+            hanta_mapping = {
+                "andes": "ANDV",
+                "sin nombre": "SNV",
+                "hantaan": "HTNV",
+                "seoul": "SEOV",
+                "puumala": "PUUV",
+                "dobrava": "DOBV",
+                "bayou": "BAYV",
+                "black creek canal": "BCCV",
+                "new york": "NYV",
+            }
+            # Orthobunyaviruses
+            bunya_mapping = {
+                "la crosse": "LACV",
+                "bunyamwera": "BUNV",
+                "schmallenberg": "SBV",
+                "california encephalitis": "CEV",
+                "tahyna": "TAHV",
+                "oropouche": "OROV",
+            }
+            for key, val in {**hanta_mapping, **bunya_mapping}.items():
                 if key in name:
                     return val
 

@@ -95,3 +95,43 @@ presets:
     sp_type: "all"
     include_internal_signals: true
     mode: "representative"
+
+  orthohantavirus:
+    description: "Orthohantavirus GPC N-terminal signal peptides (Andes, Sin Nombre, Hantaan, Seoul...)"
+    sources: ["uniprot"]
+    organism_group: "bunyavirus"
+    taxonomy_id: 1980415
+    sp_type: "type1_cleaved"
+    mode: "representative"
+
+  orthobunyavirus:
+    description: "Orthobunyavirus GPC N-terminal signal peptides (La Crosse, Bunyamwera, Schmallenberg...)"
+    sources: ["uniprot"]
+    organism_group: "bunyavirus"
+    taxonomy_id: 11572
+    sp_type: "type1_cleaved"
+    mode: "representative"
+
+  andv:
+    description: "Andes virus (ANDV) GPC signal peptide"
+    sources: ["uniprot"]
+    organism_group: "bunyavirus"
+    taxonomy_id: 1980456
+    sp_type: "type1_cleaved"
+    mode: "representative"
+
+  snv:
+    description: "Sin Nombre virus (SNV) GPC signal peptide"
+    sources: ["uniprot"]
+    organism_group: "bunyavirus"
+    taxonomy_id: 3052499
+    sp_type: "type1_cleaved"
+    mode: "representative"
+
+  lacv:
+    description: "La Crosse virus (LACV) GPC signal peptide"
+    sources: ["uniprot"]
+    organism_group: "bunyavirus"
+    taxonomy_id: 11577
+    sp_type: "type1_cleaved"
+    mode: "representative"

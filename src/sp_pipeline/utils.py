@@ -141,6 +141,73 @@ def progress_bar(iterable, desc: str = "", total: Optional[int] = None):
     return tqdm(iterable, desc=desc, total=total, unit="records")
 
 
+# ---------------------------------------------------------------------------
+# Biophysical feature calculation (Kyte-Doolittle scale)
+# ---------------------------------------------------------------------------
+
+_KYTE_DOOLITTLE = {
+    "A":  1.8, "R": -4.5, "N": -3.5, "D": -3.5, "C":  2.5,
+    "Q": -3.5, "E": -3.5, "G": -0.4, "H": -3.2, "I":  4.5,
+    "L":  3.8, "K": -3.9, "M":  1.9, "F":  2.8, "P": -1.6,
+    "S": -0.8, "T": -0.7, "W": -0.9, "Y": -1.3, "V":  4.2,
+}
+
+_CHARGE_PH7 = {
+    "K": +1.0, "R": +1.0, "H": +0.1,
+    "D": -1.0, "E": -1.0,
+}
+
+
+def _hydrophobicity_profile(sequence: str, window: int = 3) -> list[float]:
+    seq = sequence.upper()
+    if len(seq) < window:
+        return [sum(_KYTE_DOOLITTLE.get(aa, 0.0) for aa in seq) / max(len(seq), 1)]
+    return [
+        sum(_KYTE_DOOLITTLE.get(seq[i + j], 0.0) for j in range(window)) / window
+        for i in range(len(seq) - window + 1)
+    ]
+
+
+def compute_sp_features(sp_sequence: str) -> dict:
+    """Compute biophysical features for a signal peptide sequence.
+
+    Returns dict with hydrophobicity_mean, net_charge_ph7,
+    n_region (n-terminal charged), h_region (hydrophobic core), c_region (cleavage end).
+    """
+    if not sp_sequence:
+        return {"hydrophobicity_mean": None, "net_charge_ph7": None,
+                "n_region": None, "h_region": None, "c_region": None}
+
+    seq = sp_sequence.upper()
+    n = len(seq)
+    hydro_mean = round(sum(_KYTE_DOOLITTLE.get(aa, 0.0) for aa in seq) / n, 3)
+    charge = round(sum(_CHARGE_PH7.get(aa, 0.0) for aa in seq), 2)
+
+    profile = _hydrophobicity_profile(seq, window=3)
+
+    h_start = min(3, n // 3)
+    for i, val in enumerate(profile):
+        if val > 1.0:
+            h_start = i
+            break
+
+    h_end = h_start
+    for i in range(len(profile) - 1, h_start - 1, -1):
+        if profile[i] > 1.0:
+            h_end = min(i + 2, n - 2)
+            break
+
+    c_start = min(h_end + 1, n - 1)
+
+    return {
+        "hydrophobicity_mean": hydro_mean,
+        "net_charge_ph7": charge,
+        "n_region": seq[:max(1, h_start)] or None,
+        "h_region": seq[h_start : h_end + 1] or None,
+        "c_region": seq[c_start:] or None,
+    }
+
+
 def extract_cleavage_motif(full_sequence: str, cleavage_pos: int, window: int = 3) -> str:
     """Extract the cleavage site motif from a sequence.
 
