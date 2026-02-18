@@ -1,0 +1,214 @@
+# =============================================================================
+# Sec61-Target-Scout: Presets de Queries
+# =============================================================================
+# Cada preset define una query a UniProt y los parámetros de parsing.
+#
+# Campos:
+#   description  - Descripción legible del preset
+#   query        - Query para la API REST de UniProt
+#   parse_mode   - Qué parsers activar: sp1, sa2, viral_flavi, viral_alpha, auto
+#   biology_notes - Notas biológicas para el README/log
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# HUMANOS — Signal Peptides Type 1 (Clivables)
+# ---------------------------------------------------------------------------
+human_sp1:
+  description: "SPs clivables humanos (Type 1) — Solo Swiss-Prot (revisados)"
+  query: "(taxonomy_id:9606) AND (keyword:KW-0732) AND (reviewed:true)"
+  parse_mode: "sp1"
+  biology_notes: >
+    Péptidos señal clásicos N-terminales que son clivados por la señal peptidasa
+    tras la translocación a través de Sec61. Solo entradas curadas (Swiss-Prot).
+
+human_sp1_all:
+  description: "SPs clivables humanos (Type 1) — Swiss-Prot + TrEMBL"
+  query: "(taxonomy_id:9606) AND (keyword:KW-0732)"
+  parse_mode: "sp1"
+  biology_notes: >
+    Igual que human_sp1 pero incluye entradas no revisadas (TrEMBL).
+    Mayor cobertura pero menor confianza en anotaciones.
+
+# ---------------------------------------------------------------------------
+# HUMANOS — Signal Anchors Type 2 (No clivables)
+# ---------------------------------------------------------------------------
+human_sa2:
+  description: "Signal Anchors humanos (Type 2) — Solo Swiss-Prot"
+  query: "(taxonomy_id:9606) AND (keyword:KW-0735) AND (reviewed:true)"
+  parse_mode: "sa2"
+  biology_notes: >
+    Señales de anclaje que no son clivadas. El dominio transmembrana N-terminal
+    funciona como señal de translocación y ancla permanente en la membrana.
+
+human_sa2_all:
+  description: "Signal Anchors humanos (Type 2) — Swiss-Prot + TrEMBL"
+  query: "(taxonomy_id:9606) AND (keyword:KW-0735)"
+  parse_mode: "sa2"
+  biology_notes: >
+    Igual que human_sa2 pero incluye TrEMBL.
+
+# ---------------------------------------------------------------------------
+# INFLUENZA — Hemaglutinina (HA)
+# ---------------------------------------------------------------------------
+influenza_ha:
+  description: "Péptidos señal de Hemaglutinina (HA) — Influenza A, todos los subtipos"
+  query: "(taxonomy_id:11320) AND (gene:HA) AND (keyword:KW-0732)"
+  parse_mode: "sp1"
+  biology_notes: >
+    HA de Influenza A tiene un SP clivable clásico (Type 1).
+    Incluye todos los subtipos (H1-H18). taxonomy_id:11320 = Influenza A virus.
+
+# ---------------------------------------------------------------------------
+# INFLUENZA — Neuraminidasa (NA)
+# ---------------------------------------------------------------------------
+influenza_na:
+  description: "Signal Anchors de Neuraminidasa (NA) — Influenza A, todos los subtipos"
+  query: "(taxonomy_id:11320) AND (gene:NA)"
+  parse_mode: "sa2"
+  biology_notes: >
+    NA de Influenza A tiene un signal anchor (Type 2): dominio TM N-terminal
+    no clivable que funciona como señal y ancla. Incluye todos los subtipos (N1-N11).
+
+# ---------------------------------------------------------------------------
+# FLAVIVIRUS
+# ---------------------------------------------------------------------------
+flavivirus:
+  description: "Señales de poliproteína de Flavivirus (Dengue, Zika, WNV, etc.)"
+  query: "(taxonomy_id:11050) AND (reviewed:true)"
+  parse_mode: "viral_flavi"
+  biology_notes: >
+    Flavivirus tienen múltiples señales internas en la poliproteína:
+    anchC→prM, prM-TM→E, E-TM2→NS1. Todas son Sec61-dependientes.
+    taxonomy_id:11050 = Flaviviridae.
+    NOTA: Las entradas virales NO tienen keywords KW-0732/KW-0735;
+    las señales se parsean desde features Chain y Transmembrane.
+
+# ---------------------------------------------------------------------------
+# ALPHAVIRUS — Genus
+# ---------------------------------------------------------------------------
+alphavirus:
+  description: "Señales de Alphavirus — Género completo (todas las especies)"
+  query: "(taxonomy_id:11029)"
+  parse_mode: "viral_alpha"
+  include_unreviewed: true
+  biology_notes: >
+    Alphavirus: polipéptido C→E3→E2→6K→E1.
+    E3 = señal para E2 (Sec61-dependiente). 6K = señal para E1 (Sec61-dependiente).
+    C se auto-cliva en citoplasma, no pasa por Sec61.
+    taxonomy_id:11029 = Alphavirus.
+
+# ---------------------------------------------------------------------------
+# ALPHAVIRUS — Por cepa
+# ---------------------------------------------------------------------------
+veev:
+  description: "VEEV (Venezuelan Equine Encephalitis Virus) — Todas las cepas"
+  query: "(taxonomy_id:11036)"
+  parse_mode: "viral_alpha"
+  include_unreviewed: true
+  biology_notes: >
+    VEEV: alphavirus zoonótico neurotrópico, endémico de las Américas.
+    Cepa TC83 atenuada, apta para BSL-2. TaxID 11036 = especie VEEV.
+
+sinv:
+  description: "SINV (Sindbis Virus) — Todas las cepas"
+  query: "(taxonomy_id:11034)"
+  parse_mode: "viral_alpha"
+  include_unreviewed: true
+  biology_notes: >
+    Sindbis: alphavirus prototipo, distribución global.
+    Cepa TR33975. TaxID 11034 = especie Sindbis virus.
+
+eilv:
+  description: "EILV (Eilat Virus) — Insect-specific alphavirus"
+  query: "(taxonomy_id:1231903)"
+  parse_mode: "viral_alpha"
+  include_unreviewed: true
+  biology_notes: >
+    Eilat: alphavirus insecto-específico, no replica en vertebrados.
+    Modelo para estudiar restricción vector-específica.
+    TaxID 1231903 = Eilat virus. Solo TrEMBL disponible.
+
+# ---------------------------------------------------------------------------
+# ORTHOBUNYAVIRUS — Genus
+# ---------------------------------------------------------------------------
+orthobunyavirus:
+  description: "Señales de Orthobunyavirus — Género completo"
+  query: "(taxonomy_id:11572)"
+  parse_mode: "viral_bunya"
+  include_unreviewed: true
+  biology_notes: >
+    GPC: NH₂-[SP]-[Gn]-[Gc]-COOH. SP N-terminal clivable (Sec61-dep.).
+    taxonomy_id:11572 = Orthobunyavirus.
+
+# ---------------------------------------------------------------------------
+# ORTHOBUNYAVIRUS — Por cepa
+# ---------------------------------------------------------------------------
+orov:
+  description: "OROV (Oropouche Virus) — Aislado brasileño"
+  query: "(taxonomy_id:3052429)"
+  parse_mode: "viral_bunya"
+  include_unreviewed: true
+  biology_notes: >
+    Oropouche: arbovirus emergente en Sudamérica con potencial neuroinvasivo.
+    TaxID 3052429 = Orthobunyavirus oropoucheense. Solo TrEMBL.
+
+lacv:
+  description: "LACV (La Crosse Virus) — Encefalitis pediátrica"
+  query: "(taxonomy_id:11577)"
+  parse_mode: "viral_bunya"
+  include_unreviewed: true
+  biology_notes: >
+    La Crosse: virus neurotrópico endémico de EEUU, modelo de encefalitis pediátrica.
+    TaxID 11577. Tiene Signal y Chain features en Swiss-Prot.
+
+sbv:
+  description: "SBV (Schmallenberg Virus) — Bunyavirus de ganado"
+  query: "(taxonomy_id:3052437)"
+  parse_mode: "viral_bunya"
+  include_unreviewed: true
+  biology_notes: >
+    Schmallenberg: virus de ganado con relevancia zoonótica en Europa.
+    TaxID 3052437 = Orthobunyavirus schmallenbergense.
+
+# ---------------------------------------------------------------------------
+# ORTHOHANTAVIRUS — Genus
+# ---------------------------------------------------------------------------
+orthohantavirus:
+  description: "Señales de Orthohantavirus — Género completo"
+  query: "(taxonomy_id:1980415)"
+  parse_mode: "viral_bunya"
+  include_unreviewed: true
+  biology_notes: >
+    GPC: NH₂-[SP 1-17/18]-[Gn]-[Gc]-COOH. SP N-terminal clivable (Sec61-dep.).
+    Bien anotado en Swiss-Prot con Signal + Chain + TM features.
+    taxonomy_id:1980415 = Orthohantavirus.
+
+# ---------------------------------------------------------------------------
+# ORTHOHANTAVIRUS — Por cepa
+# ---------------------------------------------------------------------------
+andv:
+  description: "ANDV (Andes Virus) — Hantavirus sudamericano BSL-4"
+  query: "(taxonomy_id:1980456)"
+  parse_mode: "viral_bunya"
+  include_unreviewed: true
+  biology_notes: >
+    Andes: hantavirus con transmisión persona-persona, propiedades neurotrópicas.
+    BSL-4. TaxID 1980456 = Andes orthohantavirus.
+
+snv:
+  description: "SNV (Sin Nombre Virus) — Hantavirus norteamericano"
+  query: "(taxonomy_id:3052499)"
+  parse_mode: "viral_bunya"
+  include_unreviewed: true
+  biology_notes: >
+    Sin Nombre: agente etiológico del síndrome pulmonar por hantavirus en EEUU.
+    TaxID 3052499 = Sin Nombre orthohantavirus.
+
+bccv:
+  description: "BCCV (Black Creek Canal Virus) — Hantavirus del SE de EEUU"
+  query: "(taxonomy_id:3052490)"
+  parse_mode: "viral_bunya"
+  include_unreviewed: true
+  biology_notes: >
+    Black Creek Canal: hantavirus nativo del sudeste de EEUU.
+    TaxID 3052490. Solo 3 entries reviewed.
