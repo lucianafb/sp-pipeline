@@ -53,6 +53,10 @@ class SPRecord:
     h_region: Optional[str] = None                 # hydrophobic core
     c_region: Optional[str] = None                 # c-terminal region with cleavage site
 
+    # Deduplication metadata (populated after sequence-based dedup)
+    all_accessions: str = ""               # Pipe-separated list of all accessions with this exact SP
+    duplicate_count: int = 1               # Number of entries sharing this exact SP sequence
+
     # Metadata
     query_group: str = ""                  # Preset name that retrieved this record
     date_retrieved: str = field(default_factory=lambda: date.today().isoformat())
@@ -103,6 +107,8 @@ CSV_COLUMNS = [
     "n_region",
     "h_region",
     "c_region",
+    "all_accessions",
+    "duplicate_count",
     "query_group",
     "date_retrieved",
 ]
