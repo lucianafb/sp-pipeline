@@ -9,9 +9,11 @@ SP-Pipeline retrieves, standardizes, and exports signal peptide (SP) annotations
 ## Features
 
 - **Multiple data sources**: UniProt/SwissProt, NCBI/GenBank, NCBI Influenza Virus Resource
-- **Preset queries**: Ready-to-use queries for human SPs (type 1 & 2), influenza HA/NA, alphavirus E3, and flavivirus SPs
+- **Preset queries**: Ready-to-use queries for human SPs (type 1 & 2), influenza HA/NA, alphavirus E3, flavivirus, and bunyavirus (Orthohantavirus / Orthobunyavirus) SPs
+- **Biophysical features**: Automatically computed Kyte-Doolittle hydrophobicity, net charge at pH 7, and n/h/c region estimates for every signal peptide
 - **Configurable evidence filtering**: Toggle between experimental, predicted, or all annotations
 - **Exhaustive vs. representative modes**: For viral queries, choose between all available sequences or representative subsets
+- **Robust API handling**: Retry with exponential backoff for rate limits and server errors; tqdm progress bar during downloads
 - **De novo predictions** (optional): Run SignalP and Phobius on retrieved sequences
 - **Idempotent exports**: Re-run the pipeline without duplicating records
 - **Cache**: Local caching to avoid redundant API calls
@@ -72,14 +74,21 @@ sp-pipeline custom --organism "Mus musculus" --sp-type type1_cleaved --output ou
 
 ## Available Presets
 
-| Preset | Description |
-|--------|-------------|
-| `human_type1` | Human type 1 (cleaved) signal peptides |
-| `human_type2` | Human type 2 signal anchors (uncleaved) |
-| `influenza_HA` | Influenza hemagglutinin SPs (all subtypes, A/B/C/D) |
-| `influenza_NA` | Influenza neuraminidase SPs (all subtypes) |
-| `alphavirus_E3` | Alphavirus E3/pE2 signal peptides |
-| `flavivirus` | Flavivirus SPs (prM + internal signals) |
+| Preset | Description | Source |
+|--------|-------------|--------|
+| `human_type1` | Human type 1 (cleaved) signal peptides | UniProt |
+| `human_type2` | Human type 2 signal anchors (uncleaved) | UniProt |
+| `influenza_HA` | Influenza hemagglutinin SPs (all subtypes, A/B/C/D) | UniProt + NCBI* |
+| `influenza_NA` | Influenza neuraminidase SPs (all subtypes) | UniProt + NCBI* |
+| `alphavirus_E3` | Alphavirus E3/pE2 signal peptides | UniProt + NCBI* |
+| `flavivirus` | Flavivirus SPs (prM + internal signals) | UniProt + NCBI* |
+| `orthohantavirus` | Orthohantavirus GPC N-terminal SPs (Andes, Sin Nombre, Hantaan, Seoul…) | UniProt |
+| `orthobunyavirus` | Orthobunyavirus GPC N-terminal SPs (La Crosse, Bunyamwera, Schmallenberg…) | UniProt |
+| `andv` | Andes virus (ANDV) GPC signal peptide | UniProt |
+| `snv` | Sin Nombre virus (SNV) GPC signal peptide | UniProt |
+| `lacv` | La Crosse virus (LACV) GPC signal peptide | UniProt |
+
+\* Requires `SP_PIPELINE_NCBI_EMAIL` to be set (see Configuration).
 
 ## Output Format
 
@@ -102,8 +111,13 @@ The pipeline produces a CSV with the following columns:
 | `sp_type` | Classification: `type1_cleaved`, `type2_signal_anchor`, `internal_signal` |
 | `cleavage_site_motif` | Cleavage site motif (e.g., AFA-QP) |
 | `evidence_method` | Evidence: `experimental`, `curated_annotation`, `predicted_signalp`, etc. |
-| `viral_subtype` | Viral subtype (e.g., H1N1, DENV-2, CHIKV) |
+| `viral_subtype` | Viral subtype (e.g., H1N1, DENV-2, CHIKV, ANDV) |
 | `viral_host` | Viral host organism |
+| `hydrophobicity_mean` | Mean Kyte-Doolittle hydrophobicity of the SP sequence |
+| `net_charge_ph7` | Estimated net charge at pH 7 |
+| `n_region` | N-terminal charged segment of the SP |
+| `h_region` | Hydrophobic core of the SP |
+| `c_region` | C-terminal region containing the cleavage site |
 | `query_group` | Preset name that retrieved this record |
 | `date_retrieved` | Date of data retrieval |
 
@@ -232,6 +246,7 @@ sp-pipeline/
 
 - [x] **Phase 1**: Core pipeline + UniProt source + human presets
 - [x] **Phase 2**: NCBI source + viral presets (influenza, alphavirus, flavivirus)
+- [x] **Phase 2.1**: Biophysical features (hydrophobicity, charge, n/h/c regions), retry/backoff, bunyavirus presets
 - [ ] **Phase 3**: SignalP/Phobius prediction wrappers
 - [ ] **Phase 4**: Google Colab notebook, extended tests, documentation
 
