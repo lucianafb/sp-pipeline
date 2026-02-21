@@ -72,6 +72,7 @@ def _apply_env_overrides(config: dict) -> dict:
     Supports:
         SP_PIPELINE_NCBI_EMAIL
         SP_PIPELINE_NCBI_API_KEY
+        SP_PIPELINE_SIGNALP_TOKEN  (BioLib API token for SignalP predictions)
     """
     env_email = os.environ.get("SP_PIPELINE_NCBI_EMAIL")
     if env_email:
@@ -80,6 +81,10 @@ def _apply_env_overrides(config: dict) -> dict:
     env_key = os.environ.get("SP_PIPELINE_NCBI_API_KEY")
     if env_key:
         config.setdefault("ncbi", {})["api_key"] = env_key
+
+    env_signalp_token = os.environ.get("SP_PIPELINE_SIGNALP_TOKEN")
+    if env_signalp_token:
+        config.setdefault("predictors", {}).setdefault("signalp", {})["api_token"] = env_signalp_token
 
     return config
 

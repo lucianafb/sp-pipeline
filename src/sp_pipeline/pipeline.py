@@ -10,6 +10,7 @@ from sp_pipeline.config import load_config, get_preset, list_presets
 from sp_pipeline.dedup import deduplicate_records, merge_with_existing
 from sp_pipeline.exporters import export_csv, export_fasta, generate_summary
 from sp_pipeline.models import SPRecord
+from sp_pipeline.predictors.signalp import SignalPPredictor
 from sp_pipeline.sources.uniprot import UniProtSource
 from sp_pipeline.sources.ncbi import NCBISource
 from sp_pipeline.utils import setup_logging, QueryCache
@@ -47,6 +48,10 @@ class SPPipeline:
         self._sources = {}
         self._init_sources()
 
+        # Initialize predictors
+        self._signalp: SignalPPredictor | None = None
+        self._init_predictors()
+
     def _init_sources(self):
         """Initialize data source modules."""
         # UniProt (always available)
@@ -66,6 +71,20 @@ class SPPipeline:
                 "NCBI source not configured. Set ncbi.email in config or "
                 "SP_PIPELINE_NCBI_EMAIL env var to enable NCBI queries."
             )
+
+    def _init_predictors(self):
+        """Initialize prediction modules (SignalP, etc.)."""
+        predictor_cfg = self.config.get("predictors", {}).get("signalp", {})
+        token = predictor_cfg.get("api_token", "")
+        if token and predictor_cfg.get("enabled", False):
+            self._signalp = SignalPPredictor(
+                api_token=token,
+                organism=predictor_cfg.get("organism", "eukarya"),
+                batch_size=predictor_cfg.get("batch_size", 500),
+            )
+            logger.info("SignalP predictor initialized (organism=%s)", predictor_cfg.get("organism", "eukarya"))
+        else:
+            self._signalp = None
 
     def run(
         self,
@@ -133,10 +152,39 @@ class SPPipeline:
             logger.warning("No records found for any preset/source combination")
             return ""
 
-        # Deduplicate
+        # Deduplicate (before predictions — gives clean input for SignalP)
         logger.info(f"Total records before dedup: {len(all_records)}")
         all_records = deduplicate_records(all_records)
         logger.info(f"Total records after dedup: {len(all_records)}")
+
+        # Run SignalP predictions if requested
+        if include_predictions and self._signalp and self._signalp.is_available():
+            logger.info("Running SignalP predictions on %d sequences...", len(all_records))
+            seqs_to_predict = [
+                {
+                    "entry_id": r.entry_id,
+                    "full_sequence": r.full_sequence,
+                    "organism": r.organism,
+                    "query_group": r.query_group,
+                    "source_db": r.source_db,
+                    "protein_name": r.protein_name,
+                    "gene_name": r.gene_name,
+                    "taxonomy_id": r.taxonomy_id,
+                }
+                for r in all_records
+                if r.full_sequence
+            ]
+            predicted = self._signalp.predict(seqs_to_predict)
+            logger.info(f"SignalP predicted {len(predicted)} signal peptides")
+            all_records.extend(predicted)
+            all_records = deduplicate_records(all_records)
+        elif include_predictions:
+            logger.warning(
+                "SignalP predictions requested but not configured. "
+                "Set SP_PIPELINE_SIGNALP_TOKEN env var and "
+                "predictors.signalp.enabled=true in config."
+            )
+
         # Filter by evidence
         if evidence and evidence != "all":
             before = len(all_records)
@@ -240,10 +288,10 @@ class SPPipeline:
         return list_presets(self.config)
 
     def check_sources(self) -> dict[str, bool]:
-        """Check availability of all configured sources.
+        """Check availability of all configured sources and predictors.
 
         Returns:
-            Dict mapping source name to availability status.
+            Dict mapping source/predictor name to availability status.
         """
         status = {}
         for name, source in self._sources.items():
@@ -251,4 +299,8 @@ class SPPipeline:
                 status[name] = source.is_available()
             except Exception:
                 status[name] = False
+
+        if self._signalp:
+            status["signalp"] = self._signalp.is_available()
+
         return status

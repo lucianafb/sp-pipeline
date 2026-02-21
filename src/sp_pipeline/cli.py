@@ -202,20 +202,34 @@ def check(
     ),
 ):
     """Check availability of data sources."""
-    console.print("[bold]Checking data sources...[/bold]\n")
+    console.print("[bold]Checking data sources and predictors...[/bold]\n")
 
     pipeline = SPPipeline(config_path=config)
     status = pipeline.check_sources()
 
-    for source, available in status.items():
-        icon = "[green]✓[/green]" if available else "[red]✗[/red]"
-        console.print(f"  {icon} {source}")
+    console.print("  [bold]Data sources:[/bold]")
+    for source in ("uniprot", "ncbi"):
+        if source in status:
+            icon = "[green]✓[/green]" if status[source] else "[red]✗[/red]"
+            console.print(f"    {icon} {source}")
 
     if "ncbi" not in status:
         console.print(
-            "\n  [yellow]ℹ[/yellow]  ncbi: not configured "
+            "\n    [yellow]ℹ[/yellow]  ncbi: not configured "
             "(optional — required only for viral presets)\n"
-            "     To enable: [cyan]export SP_PIPELINE_NCBI_EMAIL=\"your@email.com\"[/cyan]"
+            "       To enable: [cyan]export SP_PIPELINE_NCBI_EMAIL=\"your@email.com\"[/cyan]"
+        )
+
+    console.print("\n  [bold]Predictors:[/bold]")
+    if "signalp" in status:
+        icon = "[green]✓[/green]" if status["signalp"] else "[red]✗[/red]"
+        console.print(f"    {icon} SignalP 6.0 (BioLib)")
+    else:
+        console.print(
+            "    [yellow]ℹ[/yellow]  SignalP: not configured (optional — for de novo predictions)\n"
+            "       To enable:\n"
+            "       [cyan]export SP_PIPELINE_SIGNALP_TOKEN=\"your_biolib_token\"[/cyan]\n"
+            "       Set [cyan]predictors.signalp.enabled: true[/cyan] in config"
         )
 
     console.print()

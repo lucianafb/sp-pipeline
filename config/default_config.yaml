@@ -24,8 +24,11 @@ query:
 predictors:
   signalp:
     enabled: false
-    mode: "web"
-    path: ""
+    mode: "web"                # "web" uses BioLib cloud API; "local" requires local installation
+    api_token: ""              # BioLib API token — register at https://biolib.com/settings/api-tokens/
+    organism: "eukarya"        # "eukarya" or "other" (archaea + bacteria)
+    batch_size: 500            # Max sequences per BioLib submission
+    path: ""                   # Only needed if mode="local"
   phobius:
     enabled: false
     mode: "web"
